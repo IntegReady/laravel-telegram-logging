@@ -2,6 +2,7 @@
 
 namespace Logger;
 
+use DateTime;
 use Exception;
 use Monolog\Logger;
 use Monolog\Handler\AbstractProcessingHandler;
@@ -68,12 +69,15 @@ class TelegramHandler extends AbstractProcessingHandler
             return;
         }
 
+
+        dd($record['context']['exception']->getTrace());
+
         // trying to make request and send notification
         try {
             file_get_contents(
                 'https://api.telegram.org/bot' . $this->botToken . '/sendMessage?'
                 . http_build_query([
-                    'text' => $this->formatText($record['formatted'], $record['level_name']),
+                    'text' => $this->formatText($record),
                     'chat_id' => $this->chatId,
                     'parse_mode' => 'html'
                 ])
@@ -88,8 +92,30 @@ class TelegramHandler extends AbstractProcessingHandler
      * @param string $level
      * @return string
      */
-    private function formatText(string $text, string $level): string
+    private function formatText(array $record): string
     {
-        return '<b>' . $this->appName .  '</b> (' . $level . ')' . PHP_EOL  . 'Env: ' . $this->appEnv . PHP_EOL . $text;
+        try {
+            $dateTime = $record['datetime']->format('Y-m-d H:i:s');
+            $exLevel = $record['level_name'];
+            $textError = $record['message'];
+            $exception = $record['context']['exception'];
+            $fileName = $exception->file;
+            $fileLine = $exception->line;
+            $trace = $exception->getTrace();
+
+            $message = '';
+            $message .= "[{$dateTime}]" . PHP_EOL;
+            $message .= "<b>{$this->appName}</b> ({$exLevel})" . PHP_EOL;
+            $message .= "Environment: {$this->appEnv}" . PHP_EOL . PHP_EOL;
+            $message .= "Message: {$textError}" . PHP_EOL;
+            $message .= "File: {$fileName}:{$fileLine}" . PHP_EOL . PHP_EOL;
+            $message .= "Trace: " . PHP_EOL;
+        } catch (Exception $ex) {
+            $message = "Unable to get formatted error due to error: {$ex->getMessage()}" . PHP_EOL . PHP_EOL;
+            $message .= json_encode($record);
+
+        }
+        
+        return $message;
     }
 }
